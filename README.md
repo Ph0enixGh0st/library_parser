@@ -24,7 +24,9 @@ In order to start the script please run the following command in terminal/cmd/po
 ```bash
 python tululu.py -s 100 -e 150
 ```
+
 '-s' argument is the book id number starting from which the script will begin to fetch the book from tululu website
+
 '-e' argument is the book id number to which the script will finish fetching the books from tululu website
 
 Thus the above stated bash command will result in script attempt to download the books from tululu.org starting from id #100 to id #150.
