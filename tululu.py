@@ -1,99 +1,96 @@
-import argparse
-import os
-import pickle
-import requests
+import argparse, os
+import pickle, requests
 from bs4 import BeautifulSoup
+from pathvalidate import sanitize_filename
 from urllib.error import HTTPError
+from urllib.parse import urljoin
 
 
-def check_for_redirect(response):
-    if response.status_code == 302:
+def check_for_redirect(book_page):
+    if 302 in book_page.history:
         raise requests.exceptions.HTTPError
 
 
-def get_download_link_and_title(book_id):
+def make_soup(book_id):
     try:
-        id = book_id
-        url = f'https://tululu.org/b{id}/'
+        url = f'https://tululu.org/b{book_id}/'
         book_page = requests.get(url)
-
-        check_for_redirect(book_page)
-
+        book_page.raise_for_status()
         soup = BeautifulSoup(book_page.text, 'lxml')
-        book_title_author = soup.select_one('div.bookimage a')['title']
 
-        author_title_split = book_title_author.split(' - ')
-
-        author = author_title_split[0]
-        title = author_title_split[1]
-
-        book_pic_link = soup.select_one('div.bookimage img')['src']
-        book_pic_link = f"https://tululu.org{book_pic_link}"
-
-        book_download_link = soup.select('table.d_book a')[8].get('href')
-        book_download_link = f"https://tululu.org{book_download_link}"
-
-        return book_download_link, title, book_pic_link, author, title
+        return soup
 
     except:
-        return False
+        raise Exception(f"Sorry, couldn't download book with id {book_id}")
 
 
-def download_txt(url, filename, book_cover_url, folder='books/'):
+def get_download_link_and_book_credentials(soup):
 
+    book_credentials = []
+
+    book_title_author = soup.select_one('div.bookimage a')['title']
+    author_title_split = book_title_author.split(' - ')
+    author, title = author_title_split
+
+    book_pic_link = soup.select_one('div.bookimage img')['src']
+    book_pic_link = urljoin('https://tululu.org', book_pic_link)
+
+    book_download_link = soup.select('table.d_book a')[8].get('href')
+    book_download_link = urljoin('https://tululu.org', book_download_link)
+
+    book_credentials.append(book_download_link)
+    book_credentials.append(title)
+    book_credentials.append(book_pic_link)
+    book_credentials.append(author)
+
+    return book_credentials
+
+
+def download_txt(url, filename, folder='books/'):
     try:
         book_page = requests.get(url, allow_redirects=False)
         book_page.raise_for_status()
         check_for_redirect(book_page)
 
-        book_cover = requests.get(book_cover_url, allow_redirects=False)
-        book_cover.raise_for_status()
-        check_for_redirect(book_cover)
-
-        from pathvalidate import sanitize_filename
         filename = sanitize_filename(filename)
 
         with open(f"{os.path.join(folder, filename)}", 'wb') as file:
             file.write(book_page.content)
 
-        try:
-            with open(f"{os.path.join(folder, filename)}.jpg", 'wb') as file:
-                file.write(book_cover.content)
-        except:
-            print("No book cover found")
-
     except requests.exceptions.HTTPError as error:
         print("Couldn't download the book")
 
 
-def get_comments(id):
+def download_book_cover(filename, book_cover_url, folder='books/'):
+    try:
+        book_cover = requests.get(book_cover_url, allow_redirects=False)
+        book_cover.raise_for_status()
+        check_for_redirect(book_cover)
+
+        filename = sanitize_filename(filename)
+
+        with open(f"{os.path.join(folder, filename)}.jpg", 'wb') as file:
+            file.write(book_cover.content)
+    except:
+        print("Couldn't download book cover")
+
+
+def get_comments(soup):
 
     all_comments = []
-    try:
-        url = f'https://tululu.org/b{id}/'
-        book_page = requests.get(url)
-
-        soup = BeautifulSoup(book_page.text, 'lxml')
-        comments = soup.select('span.black')
-        for comment in comments:
-            all_comments.append(comment.text)
-        return all_comments
-    except:
-        print('When getting book comments something has glitched')
+    comments = soup.select('span.black')
+    for comment in comments:
+        all_comments.append(comment.text)
+    return all_comments
 
 
-def get_genre(id):
-    try:
-        url = f'https://tululu.org/b{id}/'
-        book_page = requests.get(url)
+def get_genre(soup):
 
-        soup = BeautifulSoup(book_page.text, 'lxml')
-        genre = soup.select_one('span.d_book a')['title']
-        genre_split = genre.split(' - ')
-        genre = genre_split[0]
-        return genre
-    except:
-        print('When getting book genre something has glitched')
+    genre = soup.select_one('span.d_book a')['title']
+    genre_split = genre.split(' - ')
+    genre = genre_split[0]
+    
+    return genre
 
 
 def main():
@@ -120,23 +117,25 @@ def main():
     end_id = end_id + 1
 
     for book_id in range(start_id, end_id):
-
-        if get_download_link_and_title(book_id):
-            url, filename, book_cover_url, author, title = get_download_link_and_title(book_id)
+        try:
+            soup = make_soup(book_id)
+            url, filename, book_cover_url, author = get_download_link_and_book_credentials(soup)
 
             if filename not in books_titles:
                 books_titles.append(filename)
-                download_txt(url, filename, book_cover_url)
+                download_txt(url, filename)
+                download_book_cover(filename, book_cover_url)
             else:
                 filename = f"{filename}_{book_id}"
                 books_titles.append(filename)
-                download_txt(url, filename, book_cover_url)
+                download_txt(url, filename)
+                download_book_cover(filename, book_cover_url)
 
-            all_comments = get_comments(book_id)
-            genre = get_genre(book_id)
+            all_comments = get_comments(soup)
+            genre = get_genre(soup)
 
             book_additional = {
-                "Название книги: ": title,
+                "Название книги: ": filename,
                 "Автор: ": author,
                 "Жанр: ": genre,
                 "Комментарии: ": all_comments,
@@ -145,8 +144,8 @@ def main():
             with open(f'{os.path.join(folder, filename)}_additional.txt', 'wb') as file:
                 pickle.dump(book_additional, file)
 
-        else:
-            print(f'Something went wrong with book id: {book_id}')
+        except:
+            print(f'Something went wrong with book {book_id}')
 
 
 if __name__ == '__main__':
