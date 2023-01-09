@@ -1,4 +1,4 @@
-import argparse, os
+import argparse, logging, os, time
 import pickle, requests
 from bs4 import BeautifulSoup
 from pathvalidate import sanitize_filename
@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 
 
 def check_for_redirect(book_page):
-    if 302 in book_page.history:
+    if book_page.history:
         raise requests.exceptions.HTTPError
 
 
@@ -21,22 +21,23 @@ def make_soup(book_id):
         return soup
 
     except:
-        raise Exception(f"Sorry, couldn't download book with id {book_id}")
+        raise requests.exceptions.HTTPError
 
 
-def get_download_link_and_book_credentials(soup):
+def get_book_link_credentials(soup):
 
     book_credentials = []
 
     book_title_author = soup.select_one('div.bookimage a')['title']
     author_title_split = book_title_author.split(' - ')
-    author, title = author_title_split
+    author = author_title_split[0]
+    title = ' '.join(author_title_split[1:])
 
     book_pic_link = soup.select_one('div.bookimage img')['src']
-    book_pic_link = urljoin('https://tululu.org', book_pic_link)
+    book_pic_link = urljoin('https://tululu.org/shots', book_pic_link)
 
     book_download_link = soup.select('table.d_book a')[8].get('href')
-    book_download_link = urljoin('https://tululu.org', book_download_link)
+    book_download_link = urljoin('https://tululu.org/txt.php', book_download_link)
 
     book_credentials.append(book_download_link)
     book_credentials.append(title)
@@ -57,8 +58,8 @@ def download_txt(url, filename, folder='books/'):
         with open(f"{os.path.join(folder, filename)}", 'wb') as file:
             file.write(book_page.content)
 
-    except requests.exceptions.HTTPError as error:
-        print("Couldn't download the book")
+    except requests.exceptions.HTTPError:
+        raise requests.exceptions.HTTPError
 
 
 def download_book_cover(filename, book_cover_url, folder='books/'):
@@ -72,15 +73,15 @@ def download_book_cover(filename, book_cover_url, folder='books/'):
         with open(f"{os.path.join(folder, filename)}.jpg", 'wb') as file:
             file.write(book_cover.content)
     except:
-        print("Couldn't download book cover")
+        raise requests.exceptions.HTTPError
 
 
 def get_comments(soup):
 
     all_comments = []
     comments = soup.select('span.black')
-    for comment in comments:
-        all_comments.append(comment.text)
+    all_comments = [comment.text for comment in comments]
+
     return all_comments
 
 
@@ -88,9 +89,9 @@ def get_genre(soup):
 
     genre = soup.select_one('span.d_book a')['title']
     genre_split = genre.split(' - ')
-    genre = genre_split[0]
-    
-    return genre
+    genre_split.pop()
+
+    return genre_split
 
 
 def main():
@@ -119,17 +120,17 @@ def main():
     for book_id in range(start_id, end_id):
         try:
             soup = make_soup(book_id)
-            url, filename, book_cover_url, author = get_download_link_and_book_credentials(soup)
+            url, filename, book_cover_url, author = get_book_link_credentials(soup)
 
             if filename not in books_titles:
                 books_titles.append(filename)
-                download_txt(url, filename)
-                download_book_cover(filename, book_cover_url)
+
             else:
                 filename = f"{filename}_{book_id}"
                 books_titles.append(filename)
-                download_txt(url, filename)
-                download_book_cover(filename, book_cover_url)
+            
+            download_txt(url, filename)
+            download_book_cover(filename, book_cover_url)
 
             all_comments = get_comments(soup)
             genre = get_genre(soup)
@@ -144,8 +145,15 @@ def main():
             with open(f'{os.path.join(folder, filename)}_additional.txt', 'wb') as file:
                 pickle.dump(book_additional, file)
 
-        except:
-            print(f'Something went wrong with book {book_id}')
+        except requests.exceptions.ConnectionError:
+            logging.exception('Connection issues, will retry after timeout.')
+            time.sleep(30)
+        except requests.exceptions.HTTPError:
+            print('HTTP Error, broken link or redirect')
+        except TypeError:
+            print(f'Unable to make soup for book {book_id} due to insufficient data')
+        except IndexError:
+            print(f'Unable to download book {book_id} due to missing link')
 
 
 if __name__ == '__main__':
