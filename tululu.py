@@ -114,13 +114,6 @@ def main():
             soup = make_soup(book_id)
             url, filename, book_cover_url, author = get_book_link_credentials(soup, book_id)
 
-            if filename not in books_titles:
-                books_titles.append(filename)
-
-            else:
-                filename = f"{filename}_{book_id}"
-                books_titles.append(filename)
-
             try:
                 download_txt(url, filename)
             except requests.exceptions.HTTPError:
