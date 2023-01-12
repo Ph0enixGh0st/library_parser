@@ -17,7 +17,7 @@ def make_soup(book_id):
     book_page = requests.get(url)
     book_page.raise_for_status()
     soup = BeautifulSoup(book_page.text, 'lxml')
-    
+
     return soup
 
 
@@ -31,14 +31,10 @@ def get_book_link_credentials(soup, book_id):
     title = ' '.join(author_title_split[1:])
 
     book_pic_link = soup.select_one('div.bookimage img')['src']
-    print('book_pic_link', book_pic_link)
     book_pic_link = urljoin(f'https://tululu.org/b{book_id}', book_pic_link)
-    print('full_book_pic_link', book_pic_link)
 
     book_download_link = soup.select('table.d_book a')[8].get('href')
-    print('book_download_link', book_download_link)
     book_download_link = urljoin(f'https://tululu.org/b{book_id}', book_download_link)
-    print('full_book_download_link', book_download_link)
 
     book_credentials.append(book_download_link)
     book_credentials.append(title)
@@ -124,7 +120,7 @@ def main():
             else:
                 filename = f"{filename}_{book_id}"
                 books_titles.append(filename)
-            
+
             try:
                 download_txt(url, filename)
             except requests.exceptions.HTTPError:
