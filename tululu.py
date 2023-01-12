@@ -12,19 +12,16 @@ def check_for_redirect(book_page):
 
 
 def make_soup(book_id):
-    try:
-        url = f'https://tululu.org/b{book_id}/'
-        book_page = requests.get(url)
-        book_page.raise_for_status()
-        soup = BeautifulSoup(book_page.text, 'lxml')
 
-        return soup
-
-    except:
-        raise requests.exceptions.HTTPError
+    url = f'https://tululu.org/b{book_id}/'
+    book_page = requests.get(url)
+    book_page.raise_for_status()
+    soup = BeautifulSoup(book_page.text, 'lxml')
+    
+    return soup
 
 
-def get_book_link_credentials(soup):
+def get_book_link_credentials(soup, book_id):
 
     book_credentials = []
 
@@ -34,10 +31,14 @@ def get_book_link_credentials(soup):
     title = ' '.join(author_title_split[1:])
 
     book_pic_link = soup.select_one('div.bookimage img')['src']
-    book_pic_link = urljoin('https://tululu.org/shots', book_pic_link)
+    print('book_pic_link', book_pic_link)
+    book_pic_link = urljoin(f'https://tululu.org/b{book_id}', book_pic_link)
+    print('full_book_pic_link', book_pic_link)
 
     book_download_link = soup.select('table.d_book a')[8].get('href')
-    book_download_link = urljoin('https://tululu.org/txt.php', book_download_link)
+    print('book_download_link', book_download_link)
+    book_download_link = urljoin(f'https://tululu.org/b{book_id}', book_download_link)
+    print('full_book_download_link', book_download_link)
 
     book_credentials.append(book_download_link)
     book_credentials.append(title)
@@ -48,32 +49,27 @@ def get_book_link_credentials(soup):
 
 
 def download_txt(url, filename, folder='books/'):
-    try:
-        book_page = requests.get(url, allow_redirects=False)
-        book_page.raise_for_status()
-        check_for_redirect(book_page)
 
-        filename = sanitize_filename(filename)
+    book_page = requests.get(url, allow_redirects=False)
+    book_page.raise_for_status()
+    check_for_redirect(book_page)
 
-        with open(f"{os.path.join(folder, filename)}", 'wb') as file:
-            file.write(book_page.content)
+    filename = sanitize_filename(filename)
 
-    except requests.exceptions.HTTPError:
-        raise requests.exceptions.HTTPError
+    with open(f"{os.path.join(folder, filename)}", 'wb') as file:
+        file.write(book_page.content)
 
 
 def download_book_cover(filename, book_cover_url, folder='books/'):
-    try:
-        book_cover = requests.get(book_cover_url, allow_redirects=False)
-        book_cover.raise_for_status()
-        check_for_redirect(book_cover)
 
-        filename = sanitize_filename(filename)
+    book_cover = requests.get(book_cover_url, allow_redirects=False)
+    book_cover.raise_for_status()
+    check_for_redirect(book_cover)
 
-        with open(f"{os.path.join(folder, filename)}.jpg", 'wb') as file:
-            file.write(book_cover.content)
-    except:
-        raise requests.exceptions.HTTPError
+    filename = sanitize_filename(filename)
+
+    with open(f"{os.path.join(folder, filename)}.jpg", 'wb') as file:
+        file.write(book_cover.content)
 
 
 def get_comments(soup):
@@ -120,7 +116,7 @@ def main():
     for book_id in range(start_id, end_id):
         try:
             soup = make_soup(book_id)
-            url, filename, book_cover_url, author = get_book_link_credentials(soup)
+            url, filename, book_cover_url, author = get_book_link_credentials(soup, book_id)
 
             if filename not in books_titles:
                 books_titles.append(filename)
@@ -129,8 +125,15 @@ def main():
                 filename = f"{filename}_{book_id}"
                 books_titles.append(filename)
             
-            download_txt(url, filename)
-            download_book_cover(filename, book_cover_url)
+            try:
+                download_txt(url, filename)
+            except requests.exceptions.HTTPError:
+                raise requests.exceptions.HTTPError
+
+            try:
+                download_book_cover(filename, book_cover_url)
+            except requests.exceptions.HTTPError:
+                raise requests.exceptions.HTTPError
 
             all_comments = get_comments(soup)
             genre = get_genre(soup)
