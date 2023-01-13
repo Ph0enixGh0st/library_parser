@@ -18,17 +18,15 @@ def make_soup(book_id):
     book_page.raise_for_status()
     soup = BeautifulSoup(book_page.text, 'lxml')
 
-    return soup
+    return soup, book_page
 
 
 def get_book_link_credentials(soup, book_id):
 
     book_credentials = []
 
-    book_title_author = soup.select_one('div.bookimage a')['title']
-    author_title_splitted = book_title_author.split(' - ')
-    author = author_title_splitted[0]
-    title = ' '.join(author_title_splitted[1:])
+    book_title_author = soup.select_one('.ow_px_td h1').text
+    title, author = book_title_author.split(' \xa0 :: \xa0 ')
 
     book_pic_link = soup.select_one('div.bookimage img')['src']
     book_pic_link = urljoin(f'https://tululu.org/b{book_id}', book_pic_link)
@@ -48,7 +46,6 @@ def download_txt(url, filename, folder='books/'):
 
     book_page = requests.get(url, allow_redirects=False)
     book_page.raise_for_status()
-    check_for_redirect(book_page)
 
     filename = sanitize_filename(filename)
 
@@ -60,7 +57,6 @@ def download_book_cover(filename, book_cover_url, folder='books/'):
 
     book_cover = requests.get(book_cover_url, allow_redirects=False)
     book_cover.raise_for_status()
-    check_for_redirect(book_cover)
 
     filename = sanitize_filename(filename)
 
@@ -79,11 +75,8 @@ def get_comments(soup):
 
 def get_genre(soup):
 
-    genre = soup.select_one('span.d_book a')['title']
-    genre_splitted = genre.split(' - ')
-    genre_splitted.pop()
-
-    return genre_splitted
+    genres = soup.select('span.d_book a')
+    return [genre.text for genre in genres]
 
 
 def main():
@@ -98,8 +91,6 @@ def main():
     except OSError as error:
         print("Folder '%s' can not be created")
 
-    books_titles = []
-
     parser = argparse.ArgumentParser(description="The script downloads books from tululu portal")
     parser.add_argument("-s", "--start_id", default=1, help="Starting book id", type=int)
     parser.add_argument("-e", "--end_id", default=2, help="Ending book id", type=int)
@@ -111,7 +102,8 @@ def main():
 
     for book_id in range(start_id, end_id):
         try:
-            soup = make_soup(book_id)
+            soup, url_checker = make_soup(book_id)
+            check_for_redirect(url_checker)
             url, filename, book_cover_url, author = get_book_link_credentials(soup, book_id)
 
             try:
