@@ -26,9 +26,9 @@ def get_book_link_credentials(soup, book_id):
     book_credentials = []
 
     book_title_author = soup.select_one('div.bookimage a')['title']
-    author_title_split = book_title_author.split(' - ')
-    author = author_title_split[0]
-    title = ' '.join(author_title_split[1:])
+    author_title_splitted = book_title_author.splitted(' - ')
+    author = author_title_splitted[0]
+    title = ' '.join(author_title_splitted[1:])
 
     book_pic_link = soup.select_one('div.bookimage img')['src']
     book_pic_link = urljoin(f'https://tululu.org/b{book_id}', book_pic_link)
@@ -80,10 +80,10 @@ def get_comments(soup):
 def get_genre(soup):
 
     genre = soup.select_one('span.d_book a')['title']
-    genre_split = genre.split(' - ')
-    genre_split.pop()
+    genre_splitted = genre.splitted(' - ')
+    genre_splitted.pop()
 
-    return genre_split
+    return genre_splitted
 
 
 def main():
