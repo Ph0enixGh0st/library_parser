@@ -26,7 +26,7 @@ def get_book_link_credentials(soup, book_id):
     book_credentials = []
 
     book_title_author = soup.select_one('div.bookimage a')['title']
-    author_title_splitted = book_title_author.splitted(' - ')
+    author_title_splitted = book_title_author.split(' - ')
     author = author_title_splitted[0]
     title = ' '.join(author_title_splitted[1:])
 
@@ -80,7 +80,7 @@ def get_comments(soup):
 def get_genre(soup):
 
     genre = soup.select_one('span.d_book a')['title']
-    genre_splitted = genre.splitted(' - ')
+    genre_splitted = genre.split(' - ')
     genre_splitted.pop()
 
     return genre_splitted
@@ -116,10 +116,6 @@ def main():
 
             try:
                 download_txt(url, filename)
-            except requests.exceptions.HTTPError:
-                raise requests.exceptions.HTTPError
-
-            try:
                 download_book_cover(filename, book_cover_url)
             except requests.exceptions.HTTPError:
                 raise requests.exceptions.HTTPError
