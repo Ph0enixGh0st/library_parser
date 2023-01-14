@@ -17,8 +17,9 @@ def make_soup(book_id):
     book_page = requests.get(url)
     book_page.raise_for_status()
     soup = BeautifulSoup(book_page.text, 'lxml')
+    check_for_redirect(book_page)
 
-    return soup, book_page
+    return soup
 
 
 def get_book_link_credentials(soup, book_id):
@@ -46,7 +47,7 @@ def download_txt(url, filename, folder='books/'):
 
     book_page = requests.get(url, allow_redirects=False)
     book_page.raise_for_status()
-
+    check_for_redirect(book_page)
     filename = sanitize_filename(filename)
 
     with open(f"{os.path.join(folder, filename)}", 'wb') as file:
@@ -57,7 +58,7 @@ def download_book_cover(filename, book_cover_url, folder='books/'):
 
     book_cover = requests.get(book_cover_url, allow_redirects=False)
     book_cover.raise_for_status()
-
+    check_for_redirect(book_cover)
     filename = sanitize_filename(filename)
 
     with open(f"{os.path.join(folder, filename)}.jpg", 'wb') as file:
@@ -66,14 +67,13 @@ def download_book_cover(filename, book_cover_url, folder='books/'):
 
 def get_comments(soup):
 
-    all_comments = []
     comments = soup.select('span.black')
     all_comments = [comment.text for comment in comments]
 
     return all_comments
 
 
-def get_genre(soup):
+def get_genres(soup):
 
     genres = soup.select('span.d_book a')
     return [genre.text for genre in genres]
@@ -102,18 +102,14 @@ def main():
 
     for book_id in range(start_id, end_id):
         try:
-            soup, url_checker = make_soup(book_id)
-            check_for_redirect(url_checker)
+            soup = make_soup(book_id)
             url, filename, book_cover_url, author = get_book_link_credentials(soup, book_id)
 
-            try:
-                download_txt(url, filename)
-                download_book_cover(filename, book_cover_url)
-            except requests.exceptions.HTTPError:
-                raise requests.exceptions.HTTPError
+            download_txt(url, filename)
+            download_book_cover(filename, book_cover_url)
 
             all_comments = get_comments(soup)
-            genre = get_genre(soup)
+            genre = get_genres(soup)
 
             book_additional = {
                 "Название книги: ": filename,
@@ -127,6 +123,7 @@ def main():
 
         except requests.exceptions.ConnectionError:
             logging.exception('Connection issues, will retry after timeout.')
+            print('Connection issues, will retry after timeout.')
             time.sleep(30)
         except requests.exceptions.HTTPError:
             print('HTTP Error, broken link or redirect')
